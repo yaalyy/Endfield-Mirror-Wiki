@@ -1,0 +1,9 @@
+node_modules/
+.mirror/
+dist/
+reports/
+test-results/
+playwright-report/
+*.log
+.env*
+!.env.example
