@@ -1,0 +1,98 @@
+name: Sync and Pages
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: 重新获取全部静态图片
+        type: boolean
+        default: false
+      allow_removals:
+        description: 接受超过 10% 的真实目录删除
+        type: boolean
+        default: false
+      publish:
+        description: 构建后发布（仍需仓库变量启用）
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: mirror-sync-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: .mirror/current
+          key: mirror-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mirror-v1-${{ runner.os }}-
+      - name: Synchronize complete snapshot
+        run: node --use-system-ca scripts/workflow-sync.ts
+        env:
+          FORCE_REFRESH: ${{ inputs.force_refresh }}
+          ALLOW_REMOVALS: ${{ inputs.allow_removals }}
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run verify
+      - run: npx playwright install --with-deps chromium firefox
+      - run: npm run test:e2e
+      - name: Save validated snapshot
+        id: save-cache
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: .mirror/current
+          key: mirror-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Report cache warning
+        if: steps.save-cache.outcome == 'failure'
+        run: node -e "console.log('::warning::成功快照缓存保存失败；网站产物仍有效，下次可以全量重建。')"
+      - name: Save reusable website archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: website-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
+          retention-days: 14
+      - name: Prepare Pages artifact
+        if: vars.PAGES_DEPLOY_ENABLED == 'true' && (github.event_name == 'schedule' || inputs.publish == true)
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist/
+      - name: Save diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sync-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/
+            test-results/
+          retention-days: 7
+  deploy:
+    needs: build
+    if: vars.PAGES_DEPLOY_ENABLED == 'true' && (github.event_name == 'schedule' || inputs.publish == true)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
