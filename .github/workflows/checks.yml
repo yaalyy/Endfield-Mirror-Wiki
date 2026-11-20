@@ -31,4 +31,4 @@ jobs:
           path: |
             reports/
             test-results/
-          retention-days: 14
+          retention-days: 3
