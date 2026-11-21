@@ -1,7 +1,7 @@
 name: Sync and Pages
 on:
   schedule:
-    - cron: "17 4 * * 1"
+    - cron: "17 4 * * *"
   workflow_dispatch:
     inputs:
       force_refresh:
@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -34,12 +35,20 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Define snapshot cache keys
+        id: snapshot-cache
+        env:
+          SNAPSHOT_CACHE_PREFIX: mirror-v1-${{ runner.os }}-
+          SNAPSHOT_CACHE_KEY: mirror-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          echo "prefix=$SNAPSHOT_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "key=$SNAPSHOT_CACHE_KEY" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v5
         continue-on-error: true
         with:
           path: .mirror/current
-          key: mirror-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: mirror-v1-${{ runner.os }}-
+          key: ${{ steps.snapshot-cache.outputs.key }}
+          restore-keys: ${{ steps.snapshot-cache.outputs.prefix }}
       - name: Synchronize complete snapshot
         run: node --use-system-ca scripts/workflow-sync.ts
         env:
@@ -57,10 +66,53 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: .mirror/current
-          key: mirror-v1-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ steps.snapshot-cache.outputs.key }}
+      - name: Confirm saved snapshot and prune old caches
+        id: prune-cache
+        if: steps.save-cache.outcome == 'success'
+        continue-on-error: true
+        uses: actions/github-script@v8
+        env:
+          SNAPSHOT_CACHE_PREFIX: ${{ steps.snapshot-cache.outputs.prefix }}
+          SNAPSHOT_CACHE_KEY: ${{ steps.snapshot-cache.outputs.key }}
+        with:
+          script: |
+            const prefix = process.env.SNAPSHOT_CACHE_PREFIX;
+            const key = process.env.SNAPSHOT_CACHE_KEY;
+            if (!prefix || !key || !key.startsWith(prefix)) {
+              throw new Error('Invalid snapshot cache key or prefix');
+            }
+
+            // A successful save step can still mean the cache was not saved.
+            // Collect every page before deleting, so pagination stays stable.
+            const caches = await github.paginate(
+              github.rest.actions.getActionsCacheList,
+              { ...context.repo, ref: context.ref, key: prefix, per_page: 100 },
+              response => response.data.actions_caches,
+            );
+            const saved = caches.find(cache =>
+              cache.ref === context.ref && cache.key === key
+            );
+            if (!saved) {
+              core.warning('未确认新快照缓存保存成功；保留全部旧缓存。');
+              return;
+            }
+
+            const oldCaches = caches.filter(cache =>
+              cache.ref === context.ref &&
+              cache.key.startsWith(prefix) &&
+              cache.key !== key
+            );
+            for (const cache of oldCaches) {
+              await github.rest.actions.deleteActionsCacheById({
+                ...context.repo,
+                cache_id: cache.id,
+              });
+              core.info(`Deleted old snapshot cache: ${cache.key} (${cache.id})`);
+            }
       - name: Report cache warning
-        if: steps.save-cache.outcome == 'failure'
-        run: node -e "console.log('::warning::成功快照缓存保存失败；网站产物仍有效，下次可以全量重建。')"
+        if: steps.save-cache.outcome == 'failure' || steps.prune-cache.outcome == 'failure'
+        run: node -e "console.log('::warning::快照缓存保存或清理失败；未确认新缓存时保留旧缓存，网站产物仍有效。')"
       - name: Save reusable website archive
         uses: actions/upload-artifact@v6
         with:
