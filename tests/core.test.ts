@@ -23,6 +23,7 @@ import { activateSnapshot, recoverSnapshot } from "../scripts/sync.ts";
 import { makeFixtures, fixturePng } from "../scripts/fixtures.ts";
 import { readJson, sha, exists } from "../scripts/io.ts";
 import { tokenize } from "../shared/tokenize.ts";
+import { indexOptions, queryOptions } from "../shared/search.ts";
 import { localPath, sourceLink } from "../shared/paths.ts";
 import type { Source } from "../shared/types.ts";
 const catalog = await readJson("tests/fixtures/catalog.json");
@@ -392,19 +393,21 @@ describe("内容完整性与搜索", () => {
     expect(tokenize("终末地 Skill 123")).toEqual(
       expect.arrayContaining(["终末地", "终末", "末地", "skill", "123"]),
     );
-    const search = new MiniSearch({
-      fields: ["name", "tags", "body"],
-      tokenize,
-      processTerm: (t) => t,
-    });
+    const search = new MiniSearch<any>(indexOptions);
     search.addAll([
       { id: "a", name: "明河", tags: "", body: "" },
       { id: "b", name: "其他", tags: "", body: "明河的档案台词" },
     ]);
+    expect(search.search("明河", queryOptions)[0].id).toBe("a");
     expect(
-      search.search("明河", { boost: { name: 8, tags: 3, body: 1 } })[0].id,
-    ).toBe("a");
-    expect(search.search("档案台词").some((r) => r.id === "b")).toBe(true);
+      search.search("档案台词", queryOptions).some((r) => r.id === "b"),
+    ).toBe(true);
+    // Round-trip through JSON as the site does: sync writes, worker loads.
+    const loaded = MiniSearch.loadJS<any>(
+      JSON.parse(JSON.stringify(search)),
+      indexOptions,
+    );
+    expect(loaded.search("明河", queryOptions)[0].id).toBe("a");
   });
 });
 describe("资源与构建门禁", () => {

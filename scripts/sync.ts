@@ -9,7 +9,7 @@ import type {
   Source,
   SearchRecord,
 } from "../shared/types.ts";
-import { tokenize } from "../shared/tokenize.ts";
+import { indexOptions } from "../shared/search.ts";
 import { Api } from "./api.ts";
 import { json, readJson, exists, pool, sha } from "./io.ts";
 import {
@@ -109,11 +109,12 @@ export async function processSnapshot(
   const details: Detail[] = [];
   const records: SearchRecord[] = [];
   const structure: Record<string, number> = {};
+  const refs = references(raw);
   for (const c of cats)
     for (const entry of c.items) {
       const item = items.get(entry.id);
       if (!item) throw Error("详情缺失 " + entry.id);
-      const result = convert(item, entry, snapshotId, videos, references(raw));
+      const result = convert(item, entry, snapshotId, videos, refs);
       details.push(result.detail);
       records.push(...result.records);
       for (const [k, v] of Object.entries(result.structure))
@@ -122,7 +123,7 @@ export async function processSnapshot(
   const catalog: Catalog = {
     ...info,
     categories: cats,
-    references: references(raw),
+    references: refs,
   };
   // Only in-scope covers are needed for associated cards. Other categories remain lightweight links.
   const urls = collectUrls({ catalog, details, videos });
@@ -152,23 +153,7 @@ export async function processSnapshot(
       join(root, `processed/data/details/${detail.id}.json`),
       rewrite(detail, paths),
     );
-  const index = new MiniSearch<SearchRecord>({
-    fields: ["name", "tags", "body"],
-    storeFields: [
-      "itemId",
-      "category",
-      "name",
-      "chapterId",
-      "chapter",
-      "widgetId",
-      "widget",
-      "tabId",
-      "tab",
-      "body",
-    ],
-    tokenize,
-    processTerm: (t) => t,
-  });
+  const index = new MiniSearch<SearchRecord>(indexOptions);
   index.addAll(records);
   await json(join(root, "processed/data/search.json"), {
     schemaVersion: 1,
