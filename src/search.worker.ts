@@ -1,25 +1,8 @@
 /// <reference lib="webworker" />
 import MiniSearch from "minisearch";
-import { tokenize } from "../shared/tokenize.ts";
+import { indexOptions, queryOptions } from "../shared/search.ts";
 import type { SearchRecord } from "../shared/types.ts";
 let index: Promise<MiniSearch<SearchRecord>> | undefined;
-const options = {
-  fields: ["name", "tags", "body"],
-  storeFields: [
-    "itemId",
-    "category",
-    "name",
-    "chapterId",
-    "chapter",
-    "widgetId",
-    "widget",
-    "tabId",
-    "tab",
-    "body",
-  ],
-  tokenize,
-  processTerm: (t: string) => t,
-};
 self.onmessage = async (
   event: MessageEvent<{
     id: number;
@@ -37,16 +20,10 @@ self.onmessage = async (
       const data = await r.json();
       if (data.snapshotId !== snapshotId)
         throw Error("搜索数据已更新，请刷新页面。");
-      return MiniSearch.loadJS<SearchRecord>(data.index, options);
+      return MiniSearch.loadJS<SearchRecord>(data.index, indexOptions);
     })();
     const engine = await index;
-    const all = query.trim()
-      ? engine.search(query, {
-          boost: { name: 8, tags: 3, body: 1 },
-          combineWith: "AND",
-          prefix: (term) => /^[a-z0-9]+$/.test(term),
-        })
-      : [];
+    const all = query.trim() ? engine.search(query, queryOptions) : [];
     self.postMessage({
       id,
       total: all.length,
