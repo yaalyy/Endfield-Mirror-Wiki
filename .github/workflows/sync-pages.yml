@@ -88,7 +88,6 @@ jobs:
             const caches = await github.paginate(
               github.rest.actions.getActionsCacheList,
               { ...context.repo, ref: context.ref, key: prefix, per_page: 100 },
-              response => response.data.actions_caches,
             );
             const saved = caches.find(cache =>
               cache.ref === context.ref && cache.key === key
