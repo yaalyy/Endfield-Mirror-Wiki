@@ -22,7 +22,7 @@ export default function Search({ catalog }: { catalog: Catalog }) {
     total: number;
     error?: string;
   }>({ results: [], total: 0 });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const worker = useRef<Worker | null>(null),
     sequence = useRef(0);
   useEffect(() => {
@@ -38,13 +38,28 @@ export default function Search({ catalog }: { catalog: Catalog }) {
   useEffect(() => {
     const w = worker.current!;
     const id = ++sequence.current;
+    setResult({ results: [], total: 0 });
     setLoading(true);
     const receive = (event: MessageEvent) => {
       if (event.data.id !== sequence.current) return;
       setResult(event.data);
       setLoading(false);
     };
+    const fail = (event: Event) => {
+      if (id !== sequence.current) return;
+      setResult({
+        results: [],
+        total: 0,
+        error:
+          event instanceof ErrorEvent && event.message
+            ? `搜索线程异常：${event.message}`
+            : "搜索线程通信失败，请刷新页面。",
+      });
+      setLoading(false);
+    };
     w.addEventListener("message", receive);
+    w.addEventListener("error", fail);
+    w.addEventListener("messageerror", fail);
     w.postMessage({
       id,
       url: asset("data/search.json"),
@@ -52,14 +67,22 @@ export default function Search({ catalog }: { catalog: Catalog }) {
       query,
       limit,
     });
-    return () => w.removeEventListener("message", receive);
+    return () => {
+      w.removeEventListener("message", receive);
+      w.removeEventListener("error", fail);
+      w.removeEventListener("messageerror", fail);
+    };
   }, [query, limit, catalog.snapshotId]);
   return (
     <main className="page search-page">
       <p className="eyebrow">FULL TEXT SEARCH / 全文检索</p>
       <h1>搜索「{query}」</h1>
       <p role="status">
-        {loading ? "正在检索全部正文…" : `找到 ${result.total} 条结果`}
+        {loading
+          ? "正在检索全部正文…"
+          : result.error
+            ? "搜索失败"
+            : `找到 ${result.total} 条结果`}
       </p>
       {result.error && (
         <div role="alert">
