@@ -21,7 +21,7 @@ const catalog: Catalog = JSON.parse(
   await readFile("dist/data/catalog.json", "utf8"),
 );
 // Disable animated scrolling in automation so a pointer gesture stays on its target.
-test.use({ trace: "off", reducedMotion: "reduce" });
+test.use({ trace: "retain-on-failure", reducedMotion: "reduce" });
 test.beforeEach(async ({ page }) => {
   await page.route("https://**/*", (route) => route.abort("blockedbyclient"));
 });
@@ -190,7 +190,8 @@ for (const width of [375, 768, 1440])
   });
 test("搜索全文与结果深链接、直接刷新和失效定位", async ({ page }) => {
   // Each reload deliberately recreates the Worker and the complete search index.
-  test.setTimeout(180000);
+  // Allow six cold starts, each with a 60s search budget, plus navigation.
+  test.setTimeout(420000);
   for (const query of [
     "明河",
     "星移",
@@ -200,9 +201,13 @@ test("搜索全文与结果深链接、直接刷新和失效定位", async ({ pa
     "重蹈覆辙",
   ]) {
     await page.goto("#/search?q=" + encodeURIComponent(query));
-    await expect(page.locator(".search-result").first()).toBeVisible({
-      timeout: 30000,
-    });
+    const searchPage = page.locator(".search-page");
+    await expect(
+      searchPage.getByRole("status"),
+      `搜索「${query}」应结束加载`,
+    ).toHaveText(/^(找到 \d+ 条结果|搜索失败)$/, { timeout: 60000 });
+    await expect(searchPage.getByRole("alert")).toHaveCount(0);
+    await expect(searchPage.locator(".search-result").first()).toBeVisible();
     // This phrase also occurs in other operators' voice lines in the full index.
     const result =
       query === "重蹈覆辙"
@@ -233,6 +238,21 @@ test("搜索全文与结果深链接、直接刷新和失效定位", async ({ pa
     "#/operators/2503?chapter=missing&widget=missing&tab=missing",
   );
   await expect(page.locator("h1")).toHaveText("明河");
+});
+test("搜索线程异常显示错误并结束加载", async ({ page }) => {
+  await page.route("**/assets/search.worker-*.js", (route) =>
+    route.fulfill({
+      contentType: "application/javascript",
+      body: 'throw new Error("Search worker startup failed");',
+    }),
+  );
+  await page.goto("#/search?q=" + encodeURIComponent("明河"));
+  const searchPage = page.locator(".search-page");
+  await expect(searchPage.getByRole("alert")).toContainText("搜索线程");
+  await expect(searchPage.getByRole("status")).toHaveText("搜索失败");
+  await expect(
+    searchPage.getByRole("button", { name: "刷新", exact: true }),
+  ).toBeVisible();
 });
 test("图片放大、键盘关闭、媒体失败与懒加载", async ({ page }) => {
   await page.goto("#/operators/2503");
