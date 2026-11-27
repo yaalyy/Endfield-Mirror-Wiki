@@ -42,8 +42,12 @@ export interface Catalog extends BuildInfo {
   >;
 }
 export interface Inline {
-  kind: "text" | "entry" | "link";
+  kind: "text" | "entry" | "link" | "annotation" | "gameIcon";
   text: string;
+  inline?: Inline[];
+  nodes?: Node[];
+  iconId?: string;
+  url?: string;
   href?: string;
   entryId?: string;
   showType?: string;
@@ -53,6 +57,7 @@ export interface Inline {
   underline?: boolean;
   color?: string;
 }
+export type GameIcons = Record<string, { url: string; title: string }>;
 export interface Cell {
   row: number;
   col: number;

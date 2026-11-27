@@ -1,0 +1,155 @@
+{
+  "source": "https://zonai.skland.com/web/v1/wiki/item/info?id=2925",
+  "iconSource": "https://zonai.skland.com/web/v1/wiki/icon-category/list",
+  "fetchedAt": "2026-11-27",
+  "widgetId": "Rp5zJFSy",
+  "document": {
+    "id": "D2jcMM36",
+    "blockIds": [
+      "UBM34Vp8jfht"
+    ],
+    "blockMap": {
+      "UBM34Vp8jfht": {
+        "id": "UBM34Vp8jfht",
+        "parentId": "iic8qG0HbGgk_hLKhf62zYkHg",
+        "align": "left",
+        "kind": "text",
+        "text": {
+          "inlineElements": [
+            {
+              "kind": "text",
+              "text": {
+                "text": "装备者造成"
+              }
+            },
+            {
+              "kind": "annotation",
+              "annotation": {
+                "inlineElements": [
+                  {
+                    "underline": true,
+                    "color": "light_function_green",
+                    "kind": "text",
+                    "text": {
+                      "text": "自然爆发"
+                    }
+                  }
+                ],
+                "childIds": [
+                  "k2rweCtpqbZ3"
+                ]
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": "时，自然伤害"
+              }
+            },
+            {
+              "bold": true,
+              "color": "light_function_blueness",
+              "kind": "text",
+              "text": {
+                "text": "+12.0%"
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": "，持续20秒。"
+              }
+            }
+          ],
+          "kind": "body"
+        }
+      },
+      "k2rweCtpqbZ3": {
+        "id": "k2rweCtpqbZ3",
+        "parentId": "5A7CmZNPLAox",
+        "align": "left",
+        "kind": "text",
+        "text": {
+          "inlineElements": [
+            {
+              "kind": "gameIcon",
+              "gameIcon": {
+                "id": "combat_related__nature_infliction",
+                "text": ""
+              }
+            },
+            {
+              "underline": true,
+              "color": "light_function_green",
+              "kind": "text",
+              "text": {
+                "text": "自然附着"
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": " + "
+              }
+            },
+            {
+              "kind": "gameIcon",
+              "gameIcon": {
+                "id": "combat_related__nature_infliction",
+                "text": ""
+              }
+            },
+            {
+              "underline": true,
+              "color": "light_function_green",
+              "kind": "text",
+              "text": {
+                "text": "自然附着"
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": "会触发"
+              }
+            },
+            {
+              "color": "light_function_green",
+              "kind": "text",
+              "text": {
+                "text": "自然爆发"
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": "，对敌人造成一定"
+              }
+            },
+            {
+              "color": "light_function_green",
+              "kind": "text",
+              "text": {
+                "text": "自然伤害"
+              }
+            },
+            {
+              "kind": "text",
+              "text": {
+                "text": "。"
+              }
+            }
+          ],
+          "kind": "body"
+        }
+      }
+    }
+  },
+  "icons": [
+    {
+      "id": "combat_related__nature_infliction",
+      "url": "https://bbs.hycdn.cn/asset/game_icon/17e85168a8db49b8ae96b96e82f1b395.png",
+      "title": "自然附着"
+    }
+  ]
+}

@@ -1,16 +1,25 @@
 import { test, expect } from "@playwright/test";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
-import type { Catalog, Detail, Node } from "../../shared/types.ts";
-import { textNodes } from "../../scripts/content.ts";
+import type { Catalog, Detail, Inline, Node } from "../../shared/types.ts";
+import { convert } from "../../scripts/content.ts";
+function inlineFragments(inlines: Inline[]): string[] {
+  return inlines.flatMap((i) =>
+    i.kind === "annotation"
+      ? [...inlineFragments(i.inline || []), ...fragments(i.nodes || [])]
+      : i.kind === "gameIcon"
+        ? []
+        : [
+            i.kind === "entry"
+              ? catalog.references[i.entryId!]?.name || `词条 ${i.entryId}`
+              : i.text,
+          ],
+  );
+}
 function fragments(nodes: Node[]): string[] {
   return nodes
     .flatMap((n) => [
       n.description || "",
-      ...(n.inline || []).map((i) =>
-        i.kind === "entry"
-          ? catalog.references[i.entryId!]?.name || `词条 ${i.entryId}`
-          : i.text,
-      ),
+      ...inlineFragments(n.inline || []),
       ...fragments(n.children || []),
       ...(n.listItems || []).flatMap(fragments),
       ...(n.cells || []).flatMap((c) => fragments(c.nodes)),
@@ -72,13 +81,9 @@ test("全部词条、全部标签正文与基础渲染覆盖", async ({ page, br
       );
       await expect(page.locator("h1")).toHaveText(entry.name);
       const brief = page.locator(".description");
-      const briefText = textNodes(
-        detail.description,
-        catalog.references,
-      ).replace(/\s/g, "");
-      if (briefText)
+      for (const fragment of fragments(detail.description))
         expect((await brief.innerText()).replace(/\s/g, "")).toContain(
-          briefText,
+          fragment.replace(/\s/g, ""),
         );
       for (const chapter of detail.chapters) {
         await expect(
@@ -141,6 +146,64 @@ test("全部词条、全部标签正文与基础渲染覆盖", async ({ page, br
     ),
   );
 });
+test("真实注释可用键盘折叠，图标从本地加载，移动端无溢出", async ({ page }) => {
+  const fixture = JSON.parse(
+    await readFile("tests/fixtures/2925-annotation.json", "utf8"),
+  );
+  const entry = catalog.categories[0].items[0];
+  const detail: Detail = JSON.parse(
+    await readFile(`dist/${entry.detailPath}`, "utf8"),
+  );
+  const iconUrl = Object.values(catalog.references).find((r) => r.cover)?.cover;
+  expect(iconUrl).toMatch(/^media\//);
+  const converted = convert(
+    {
+      brief: { description: fixture.document },
+      document: {},
+    },
+    entry,
+    catalog.snapshotId,
+    {},
+    catalog.references,
+    Object.fromEntries(
+      fixture.icons.map((icon: { id: string; title: string }) => [
+        icon.id,
+        { url: iconUrl!, title: icon.title },
+      ]),
+    ),
+  );
+  await page.route(`**/${entry.detailPath}`, (route) =>
+    route.fulfill({
+      json: { ...detail, description: converted.detail.description },
+    }),
+  );
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`#/${entry.category}/${entry.id}`);
+  const note = page.locator(".description .annotation-note");
+  await expect(note).toHaveCount(1);
+  await expect(note).toContainText("对敌人造成一定");
+  const icon = note.locator("img.game-icon").first();
+  await expect(icon).toHaveAttribute("alt", "自然附着");
+  await expect
+    .poll(() =>
+      icon.evaluate(
+        (img: HTMLImageElement) => img.complete && img.naturalWidth > 0,
+      ),
+    )
+    .toBe(true);
+  const summary = note.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(note).not.toHaveAttribute("open");
+  await page.keyboard.press("Enter");
+  await expect(note).toHaveAttribute("open");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 2,
+    ),
+  ).toBe(true);
+});
+
 for (const width of [375, 768, 1440])
   test(`分类与代表详情响应式 ${width}`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: width === 375 ? 812 : 1000 });

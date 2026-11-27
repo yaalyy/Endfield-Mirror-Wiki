@@ -586,6 +586,21 @@ small {
 .facts dd {
   font-weight: 600;
 }
+.game-icon {
+  width: 1.4em;
+  height: 1.4em;
+  object-fit: contain;
+  vertical-align: sub;
+}
+.annotation-note {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 2px solid #997d49;
+  background: #f3f3ef;
+}
+.annotation-note > summary {
+  cursor: pointer;
+}
 .rich-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
