@@ -43,6 +43,25 @@ function InlineElement({
     textDecoration: i.underline ? "underline" : undefined,
     color: color(i.color),
   };
+  if (i.kind === "annotation")
+    return (
+      <span className="annotation-label" style={style}>
+        {i.inline?.map((element, index) => (
+          <InlineElement key={index} element={element} catalog={catalog} />
+        ))}
+      </span>
+    );
+  if (i.kind === "gameIcon")
+    return (
+      <img
+        className="game-icon"
+        src={asset(i.url || "")}
+        alt={i.text}
+        title={i.text || undefined}
+        loading="lazy"
+        style={style}
+      />
+    );
   if (i.kind === "text") return <span style={style}>{i.text}</span>;
   if (i.kind === "link")
     return (
@@ -93,6 +112,11 @@ function InlineElement({
     </a>
   );
 }
+function annotations(inlines: Inline[]): Inline[] {
+  return inlines.flatMap((i) =>
+    i.kind === "annotation" ? [i, ...annotations(i.inline || [])] : [],
+  );
+}
 export function Nodes({
   nodes,
   catalog,
@@ -132,11 +156,22 @@ function Block({
     case "text": {
       const Tag = (n.level ? `h${Math.min(6, n.level + 1)}` : "p") as "p";
       return (
-        <Tag className="rich-text" style={style}>
-          {n.inline?.map((i, x) => (
-            <InlineElement key={x} element={i} catalog={catalog} />
+        <>
+          <Tag className="rich-text" style={style}>
+            {n.inline?.map((i, x) => (
+              <InlineElement key={x} element={i} catalog={catalog} />
+            ))}
+          </Tag>
+          {annotations(n.inline || []).map((annotation, index) => (
+            <details className="annotation-note" key={index} open>
+              <summary>
+                注释：
+                <InlineElement element={annotation} catalog={catalog} />
+              </summary>
+              {children(annotation.nodes || [])}
+            </details>
           ))}
-        </Tag>
+        </>
       );
     }
     case "horizontalLine":

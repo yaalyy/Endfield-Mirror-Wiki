@@ -5,6 +5,7 @@ import MiniSearch from "minisearch";
 import type {
   Catalog,
   Detail,
+  GameIcons,
   Manifest,
   Source,
   SearchRecord,
@@ -21,6 +22,7 @@ import {
   collectUrls,
   rewrite,
   videoIds,
+  gameIconIds,
 } from "./content.ts";
 import { fetchMedia } from "./media.ts";
 import { validateSnapshot } from "./validate.ts";
@@ -106,6 +108,20 @@ export async function processSnapshot(
       videos[id] = { cover: "https://fixture.invalid/poster.png" };
   }
   await json(join(root, "raw/videos.json"), videos);
+  const gameIcons: GameIcons = {};
+  const iconIds = new Set([...items.values()].flatMap(gameIconIds));
+  if (iconIds.size) {
+    // Official GameIcon uses this directory; only referenced icons need mirroring.
+    if (!options.api) throw Error("游戏图标目录缺失：需要 API 获取图标元数据");
+    const result = await options.api.get("/web/v1/wiki/icon-category/list");
+    for (const category of result.data?.iconCategories || [])
+      for (const icon of category.icons || [])
+        if (iconIds.has(icon.id) && icon.url)
+          gameIcons[icon.id] = { url: icon.url, title: icon.title || "" };
+    for (const id of iconIds)
+      if (!gameIcons[id]) throw Error("游戏图标元数据缺失 " + id);
+    await json(join(root, "raw/game-icons.json"), gameIcons);
+  }
   const details: Detail[] = [];
   const records: SearchRecord[] = [];
   const structure: Record<string, number> = {};
@@ -114,7 +130,7 @@ export async function processSnapshot(
     for (const entry of c.items) {
       const item = items.get(entry.id);
       if (!item) throw Error("详情缺失 " + entry.id);
-      const result = convert(item, entry, snapshotId, videos, refs);
+      const result = convert(item, entry, snapshotId, videos, refs, gameIcons);
       details.push(result.detail);
       records.push(...result.records);
       for (const [k, v] of Object.entries(result.structure))

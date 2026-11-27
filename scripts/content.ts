@@ -2,6 +2,7 @@ import type {
   Catalog,
   Category,
   Detail,
+  GameIcons,
   Inline,
   Node,
   SearchRecord,
@@ -141,6 +142,7 @@ export function convert(
   snapshotId: string,
   videos: Record<string, { cover: string }> = {},
   refs: Catalog["references"] = {},
+  gameIcons: GameIcons = {},
 ): Conversion {
   const loc = `词条 ${entry.id}`;
   const structure: Record<string, number> = {};
@@ -163,11 +165,26 @@ export function convert(
     throw new StructureError(loc + "/extraInfo", "未支持的展示扩展");
   const documents = document.documentMap || {};
   const seenDocuments = new Set<string>();
-  function inline(v: Source, p: string): Inline {
+  function inline(
+    v: Source,
+    p: string,
+    children: (ids: string[]) => Node[],
+  ): Inline {
     bump("inline:" + v.kind);
     allowed(
       v,
-      ["kind", "text", "entry", "link", "bold", "italic", "underline", "color"],
+      [
+        "kind",
+        "text",
+        "entry",
+        "link",
+        "annotation",
+        "gameIcon",
+        "bold",
+        "italic",
+        "underline",
+        "color",
+      ],
       p,
     );
     const common = {
@@ -176,6 +193,37 @@ export function convert(
       underline: v.underline,
       color: v.color,
     };
+    if (v.kind === "annotation") {
+      const a = v.annotation;
+      if (!a || !Array.isArray(a.inlineElements) || !Array.isArray(a.childIds))
+        throw new StructureError(p + "/annotation", "无效注释");
+      allowed(a, ["inlineElements", "childIds"], p + "/annotation");
+      return {
+        kind: "annotation",
+        text: "",
+        inline: a.inlineElements.map((x: Source, i: number) =>
+          inline(x, p + "/annotation/inline/" + i, children),
+        ),
+        nodes: children(a.childIds),
+        ...common,
+      };
+    }
+    if (v.kind === "gameIcon") {
+      allowed(v.gameIcon || {}, ["id", "text"], p + "/gameIcon");
+      const icon = gameIcons[v.gameIcon?.id];
+      if (!icon?.url)
+        throw new StructureError(
+          p + "/gameIcon",
+          "游戏图标缺失 " + v.gameIcon?.id,
+        );
+      return {
+        kind: "gameIcon",
+        text: v.gameIcon.text || icon.title,
+        iconId: v.gameIcon.id,
+        url: icon.url,
+        ...common,
+      };
+    }
     if (v.kind === "text") {
       allowed(v.text || {}, ["text"], p + "/text");
       return { kind: "text", text: v.text?.text || "", ...common };
@@ -243,7 +291,10 @@ export function convert(
             ? Number(payload.kind.slice(-1))
             : 0;
           node.inline = (payload.inlineElements || []).map(
-            (v: Source, i: number) => inline(v, path + "/inline/" + i),
+            (v: Source, i: number) =>
+              inline(v, path + "/inline/" + i, (ids) =>
+                ids.map((x) => block(x, next)),
+              ),
           );
           break;
         case "image":
@@ -585,14 +636,29 @@ export function convert(
     structure,
   };
 }
+export function textInlines(
+  inlines: Inline[],
+  refs: Catalog["references"],
+): string {
+  return inlines
+    .map((i) =>
+      i.kind === "annotation"
+        ? [textInlines(i.inline || [], refs), textNodes(i.nodes || [], refs)]
+            .filter(Boolean)
+            .join(" ")
+        : i.kind === "entry"
+          ? refs[i.entryId!]?.name || ""
+          : i.text,
+    )
+    .filter(Boolean)
+    .join(" ");
+}
 export function textNodes(nodes: Node[], refs: Catalog["references"]): string {
   return nodes
     .map((n) =>
       [
         n.description,
-        ...(n.inline || []).map((i) =>
-          i.kind === "entry" ? refs[i.entryId!]?.name || "" : i.text,
-        ),
+        textInlines(n.inline || [], refs),
         textNodes(n.children || [], refs),
         ...(n.listItems || []).map((x) => textNodes(x, refs)),
         ...(n.cells || []).map((c) => textNodes(c.nodes, refs)),
@@ -640,6 +706,17 @@ export function videoIds(value: unknown): string[] {
     if (!v || typeof v !== "object") return;
     if (v.kind === "externalVideo" && v.externalVideo?.kind === "skland")
       ids.add(String(v.externalVideo.id));
+    Object.values(v).forEach(walk);
+  }
+  walk(value);
+  return [...ids];
+}
+export function gameIconIds(value: unknown): string[] {
+  const ids = new Set<string>();
+  function walk(v: any) {
+    if (!v || typeof v !== "object") return;
+    if (v.kind === "gameIcon" && typeof v.gameIcon?.id === "string")
+      ids.add(v.gameIcon.id);
     Object.values(v).forEach(walk);
   }
   walk(value);
