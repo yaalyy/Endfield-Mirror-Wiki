@@ -167,7 +167,17 @@ export function convert(
     bump("inline:" + v.kind);
     allowed(
       v,
-      ["kind", "text", "entry", "link", "bold", "italic", "underline", "color"],
+      [
+        "kind",
+        "text",
+        "entry",
+        "link",
+        "bold",
+        "italic",
+        "underline",
+        "color",
+        "annotation",
+      ],
       p,
     );
     const common = {

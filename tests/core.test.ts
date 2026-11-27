@@ -309,6 +309,36 @@ describe("内容完整性与搜索", () => {
       ),
     ).toThrow("未知行内");
   });
+  it("接受行内注释元数据而不改变文本内容", () => {
+    const result = convert(
+      minimal(
+        doc({
+          a: {
+            kind: "text",
+            text: {
+              kind: "body",
+              inlineElements: [
+                {
+                  kind: "text",
+                  text: { text: "可见文本" },
+                  annotation: { id: "annotation-id", content: "注释" },
+                },
+              ],
+            },
+          },
+        }),
+      ),
+      entry,
+      "x",
+    );
+    expect(result.detail.description[0].inline?.[0]).toMatchObject({
+      kind: "text",
+      text: "可见文本",
+    });
+    expect(result.detail.description[0].inline?.[0]).not.toHaveProperty(
+      "annotation",
+    );
+  });
   it("未知组件和非空扩展生成带位置诊断", () => {
     const i = structuredClone(sample);
     i.document.widgetCommonMap[i.document.chapterGroup[0].widgets[0].id].type =
